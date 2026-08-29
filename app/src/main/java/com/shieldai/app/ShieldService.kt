@@ -9,29 +9,23 @@ import android.widget.Toast
 class ShieldService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null) return
+        val eventObject = event ?: return
+        val packageName = eventObject.packageName?.toString() ?: "App"
+        val textList = eventObject.text
 
-        val packageName = event.packageName?.toString() ?: "App"
-        val textList = event.text
-
-        if (textList != null && textList.isNotEmpty()) {
-            val textContent = textList.toString()
-            Handler(Looper.getMainLooper()).post {
-                Toast.makeText(
-                    applicationContext,
-                    "[$packageName]: $textContent",
-                    Toast.LENGTH_SHORT
-                ).show()
+        if (!textList.isNullOrEmpty()) {
+            val eventTexts = textList.filterNotNull().joinToString(" ")
+            if (eventTexts.isNotBlank()) {
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(
+                        applicationContext,
+                        "[$packageName]: $eventTexts",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
         }
     }
 
-    override fun onInterrupt() {
-    }
-}
-    }
-
-    override fun onInterrupt() {
-        // Chamado caso o sistema interrompa o serviço
-    }
+    override fun onInterrupt() {}
 }
