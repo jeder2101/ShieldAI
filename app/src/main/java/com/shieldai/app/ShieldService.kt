@@ -1,7 +1,6 @@
 package com.shieldai.app
 
 import android.accessibilityservice.AccessibilityService
-import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -11,11 +10,12 @@ import android.widget.Toast
 class ShieldService : AccessibilityService() {
 
     private var lastActionTime: Long = 0
+    private val handler = Handler(Looper.getMainLooper())
+    private var isWaitingForTimer = false
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val rootNode = rootInActiveWindow ?: return
 
-        // Processamento em tempo real com debounce minimo (100ms)
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastActionTime < 100) return
 
@@ -23,56 +23,58 @@ class ShieldService : AccessibilityService() {
     }
 
     private fun scanAndShieldRealTime(node: AccessibilityNodeInfo) {
-        // 1. Ação de Clique Direto em Botões de Pulo/Fechamento
-        if (AdClassifier.isCloseOrSkipButton(node)) {
+        // 1. Tenta clicar imediatamente se o botão já estiver liberado/clicável
+        if (AdClassifier.isCloseOrSkipButton(node) && node.isClickable) {
             if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                 lastActionTime = System.currentTimeMillis()
-                notifyUser("ShieldAI: Anúncio bloqueado em tempo real!")
+                isWaitingForTimer = false
+                notifyUser("ShieldAI: Anúncio pulado com sucesso!")
                 return
             }
         }
 
-        // 2. Detecção Contextual de Anúncio na Tela
-        if (AdClassifier.isAdElement(node)) {
-            // Tenta fechar o anúncio buscando o botão correspondente no elemento pai
-            var parent = node.parent
-            var depth = 0
-            while (parent != null && depth < 5) {
-                if (clickCloseChild(parent)) {
-                    lastActionTime = System.currentTimeMillis()
-                    notifyUser("ShieldAI: Elemento publicitário neutralizado!")
-                    return
-                }
-                parent = parent.parent
-                depth++
-            }
+        // 2. Se detectar um temporizador rodando, ativa a checagem contínua acelerada
+        val text = (node.text?.toString() ?: node.contentDescription?.toString())?.lowercase() ?: ""
+        if (hasTimerIndicator(text) && !isWaitingForTimer) {
+            isWaitingForTimer = true
+            notifyUser("ShieldAI: Temporizador detectado. Aguardando liberação...")
+            scheduleFastCheck()
         }
 
-        // Varredura recursiva
+        // Varredura nos nós filhos
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             scanAndShieldRealTime(child)
         }
     }
 
-    private fun clickCloseChild(container: AccessibilityNodeInfo): Boolean {
-        for (i in 0 until container.childCount) {
-            val child = container.getChild(i) ?: continue
-            if (AdClassifier.isCloseOrSkipButton(child)) {
-                return child.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    private fun hasTimerIndicator(text: String): Boolean {
+        return text.contains("pular em") || text.contains("skip in") || 
+               text.contains("anúncio em") || text.matches(Regex(".*\\b[0-9]{1,2}\\b.*"))
+    }
+
+    private fun scheduleFastCheck() {
+        if (!isWaitingForTimer) return
+        
+        handler.postDelayed({
+            val rootNode = rootInActiveWindow
+            if (rootNode != null) {
+                scanAndShieldRealTime(rootNode)
             }
-            if (child.childCount > 0) {
-                if (clickCloseChild(child)) return true
+            // Mantém a verificação contínua enquanto o anúncio estiver na tela
+            if (isWaitingForTimer) {
+                scheduleFastCheck()
             }
-        }
-        return false
+        }, 150) // Checa a cada 150 milissegundos
     }
 
     private fun notifyUser(msg: String) {
-        Handler(Looper.getMainLooper()).post {
+        handler.post {
             Toast.makeText(applicationContext, msg, Toast.LENGTH_SHORT).show()
         }
     }
 
-    override fun onInterrupt() {}
+    override fun onInterrupt() {
+        isWaitingForTimer = false
+    }
 }
