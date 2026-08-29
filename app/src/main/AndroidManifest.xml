@@ -8,7 +8,7 @@
         android:allowBackup="true"
         android:label="ShieldAI"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
         <activity
             android:name="com.shieldai.app.MainActivity"
