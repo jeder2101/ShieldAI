@@ -5,6 +5,9 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -19,6 +22,7 @@ class ShieldService : AccessibilityService() {
     
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
@@ -48,26 +52,33 @@ class ShieldService : AccessibilityService() {
             if (text.contains(keyword) || desc.contains(keyword)) {
                 Log.d(TAG, "Anúncio detectado: $keyword no app ${node.packageName}")
                 
-                // Pega as coordenadas exatas do anúncio na tela
                 val bounds = Rect()
                 node.getBoundsInScreen(bounds)
 
-                // Desenha a camada de proteção sobre o anúncio
-                if (bounds.width() > 0 && bounds.height() > 0) {
-                    drawShieldOverlay(bounds)
+                // Garante que o elemento tem tamanho visível na tela
+                if (bounds.width() > 10 && bounds.height() > 10) {
+                    mainHandler.post {
+                        drawShieldOverlay(bounds)
+                    }
                 }
                 break
             }
         }
 
-        // Percorre a árvore de elementos da tela
+        // Percorre a árvore de elementos
         for (i in 0 until node.childCount) {
             scanNode(node.getChild(i))
         }
     }
 
     private fun drawShieldOverlay(bounds: Rect) {
-        // Remove a sobreposição anterior, se existir
+        // Correção de Segurança 1: Checa se a permissão de Overlay está ativa no sistema
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "Permissão de sobreposição não concedida ainda.")
+            return
+        }
+
+        // Remove sobreposição anterior se existir
         removeShieldOverlay()
 
         val layoutParamsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -77,7 +88,6 @@ class ShieldService : AccessibilityService() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // Configura uma área que intercepta toques na região do anúncio
         val params = WindowManager.LayoutParams(
             bounds.width(),
             bounds.height(),
@@ -90,18 +100,18 @@ class ShieldService : AccessibilityService() {
             y = bounds.top
         }
 
-        // View de proteção (pode ser transparente ou levemente sombreada para testes)
+        // View de teste: caixa vermelha translúcida para verificar visualmente se cobriu o anúncio
         overlayView = View(this).apply {
-            setBackgroundColor(Color.parseColor("#33FF0000")) // Sombra vermelha transparente para testes
+            setBackgroundColor(Color.parseColor("#44FF0000")) 
             setOnClickListener {
-                Log.d(TAG, "Clique no anúncio foi bloqueado pelo ShieldAI!")
+                Log.d(TAG, "Clique no anúncio bloqueado com sucesso!")
             }
         }
 
         try {
             windowManager?.addView(overlayView, params)
         } catch (e: Exception) {
-            Log.e(TAG, "Erro ao desenhar sobreposição: ${e.message}")
+            Log.e(TAG, "Erro ao adicionar View ao WindowManager: ${e.message}")
         }
     }
 
@@ -110,13 +120,15 @@ class ShieldService : AccessibilityService() {
             try {
                 windowManager?.removeView(overlayView)
             } catch (e: Exception) {
-                Log.e(TAG, "Erro ao remover sobreposição: ${e.message}")
+                Log.e(TAG, "Erro ao remover View: ${e.message}")
             }
             overlayView = null
         }
     }
 
     override fun onInterrupt() {
-        removeShieldOverlay()
+        mainHandler.post {
+            removeShieldOverlay()
+        }
     }
 }
