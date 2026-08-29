@@ -1,6 +1,9 @@
 package com.shieldai.app
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
+import android.content.res.Configuration
+import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -11,61 +14,81 @@ class ShieldService : AccessibilityService() {
 
     private var lastActionTime: Long = 0
     private val handler = Handler(Looper.getMainLooper())
-    private var isWaitingForTimer = false
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val rootNode = rootInActiveWindow ?: return
 
         val currentTime = System.currentTimeMillis()
-        if (currentTime - lastActionTime < 100) return
+        if (currentTime - lastActionTime < 300) return
 
-        scanAndShieldRealTime(rootNode)
+        scanAndNeutralize(rootNode)
     }
 
-    private fun scanAndShieldRealTime(node: AccessibilityNodeInfo) {
-        // 1. Tenta clicar imediatamente se o botão já estiver liberado/clicável
+    private fun scanAndNeutralize(node: AccessibilityNodeInfo) {
+        // 1. Prioridade: Botões explícitos de fechar/pular
         if (AdClassifier.isCloseOrSkipButton(node) && node.isClickable) {
             if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                 lastActionTime = System.currentTimeMillis()
-                isWaitingForTimer = false
-                notifyUser("ShieldAI: Anúncio pulado com sucesso!")
+                notifyUser("ShieldAI: Anúncio fechado!")
                 return
             }
         }
 
-        // 2. Se detectar um temporizador rodando, ativa a checagem contínua acelerada
-        val text = (node.text?.toString() ?: node.contentDescription?.toString())?.lowercase() ?: ""
-        if (hasTimerIndicator(text) && !isWaitingForTimer) {
-            isWaitingForTimer = true
-            notifyUser("ShieldAI: Temporizador detectado. Aguardando liberação...")
-            scheduleFastCheck()
+        // 2. Detecção de Anúncio Contextual sem botão de fechar imediato
+        if (AdClassifier.isAdElement(node)) {
+            lastActionTime = System.currentTimeMillis()
+            notifyUser("ShieldAI: Anúncio detectado. Neutralizando...")
+
+            // Executa o gesto de pular adaptado para a orientação da tela
+            performSmartSwipe()
+            return
         }
 
-        // Varredura nos nós filhos
+        // Varredura recursiva nos elementos da tela
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            scanAndShieldRealTime(child)
+            scanAndNeutralize(child)
         }
     }
 
-    private fun hasTimerIndicator(text: String): Boolean {
-        return text.contains("pular em") || text.contains("skip in") || 
-               text.contains("anúncio em") || text.matches(Regex(".*\\b[0-9]{1,2}\\b.*"))
-    }
+    /**
+     * Calcula as dimensões e executa o movimento de Swipe correto 
+     * dependendo se a tela está Em Pé (Vertical) ou Deitada (Horizontal).
+     */
+    private fun performSmartSwipe() {
+        val displayMetrics = resources.displayMetrics
+        val width = displayMetrics.widthPixels.toFloat()
+        val height = displayMetrics.heightPixels.toFloat()
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    private fun scheduleFastCheck() {
-        if (!isWaitingForTimer) return
-        
-        handler.postDelayed({
-            val rootNode = rootInActiveWindow
-            if (rootNode != null) {
-                scanAndShieldRealTime(rootNode)
+        val swipePath = Path()
+
+        if (isLandscape) {
+            // TELA DEITADA (Jogos / Vídeos): Desliza da direita para a esquerda
+            val startX = width * 0.8f
+            val endX = width * 0.2f
+            val middleY = height / 2f
+
+            swipePath.moveTo(startX, middleY)
+            swipePath.lineTo(endX, middleY)
+        } else {
+            // TELA EM PÉ (TikTok / Kwai / Shorts): Desliza de baixo para cima
+            val middleX = width / 2f
+            val startY = height * 0.8f
+            val endY = height * 0.2f
+
+            swipePath.moveTo(middleX, startY)
+            swipePath.lineTo(middleX, endY)
+        }
+
+        val gestureBuilder = GestureDescription.Builder()
+        gestureBuilder.addStroke(GestureDescription.StrokeDescription(swipePath, 0, 150))
+
+        dispatchGesture(gestureBuilder.build(), object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                super.onCompleted(gestureDescription)
             }
-            // Mantém a verificação contínua enquanto o anúncio estiver na tela
-            if (isWaitingForTimer) {
-                scheduleFastCheck()
-            }
-        }, 150) // Checa a cada 150 milissegundos
+        }, null)
     }
 
     private fun notifyUser(msg: String) {
@@ -74,7 +97,5 @@ class ShieldService : AccessibilityService() {
         }
     }
 
-    override fun onInterrupt() {
-        isWaitingForTimer = false
-    }
+    override fun onInterrupt() {}
 }
