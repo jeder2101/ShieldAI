@@ -17,17 +17,16 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Initialize Gradle Wrapper
-        run: |
-          gradle wrapper
-          chmod +x gradlew
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
 
       - name: Build APK with Gradle
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle assembleDebug --warning-mode none
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ShieldAI-debug
           path: app/build/outputs/apk/debug/app-debug.apk
-          
