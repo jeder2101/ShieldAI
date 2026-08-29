@@ -15,13 +15,42 @@ class ShieldService : AccessibilityService() {
     private var lastActionTime: Long = 0
     private val handler = Handler(Looper.getMainLooper())
 
+    // Lista de pacotes que o ShieldAI NUNCA deve monitorar (Bancos e Sistema)
+    private val ignoredPackages = setOf(
+        "br.com.gft.cesta",              // Caixa
+        "br.gov.caixa.tem",              // Caixa Tem
+        "com.itau",                      // Itaú
+        "br.com.bradesco.next",          // Bradesco / Next
+        "com.nu.production",             // Nubank
+        "com.santander.app",             // Santander
+        "com.android.launcher",          // Launcher padrão Android
+        "com.sec.android.app.launcher",  // Launcher Samsung
+        "com.google.android.apps.nexuslauncher" // Launcher Google
+    )
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        val packageName = event?.packageName?.toString() ?: return
+
+        // 1. Ignora imediatamente se for um app bancário ou a tela inicial (Launcher)
+        if (isIgnoredPackage(packageName)) {
+            return
+        }
+
         val rootNode = rootInActiveWindow ?: return
 
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastActionTime < 300) return
 
         scanAndNeutralize(rootNode)
+    }
+
+    private fun isIgnoredPackage(packageName: String): Boolean {
+        for (ignored in ignoredPackages) {
+            if (packageName.contains(ignored, ignoreCase = true) || packageName.startsWith("br.gov.caixa")) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun scanAndNeutralize(node: AccessibilityNodeInfo) {
@@ -39,22 +68,17 @@ class ShieldService : AccessibilityService() {
             lastActionTime = System.currentTimeMillis()
             notifyUser("ShieldAI: Anúncio detectado. Neutralizando...")
 
-            // Executa o gesto de pular adaptado para a orientação da tela
             performSmartSwipe()
             return
         }
 
-        // Varredura recursiva nos elementos da tela
+        // Varredura recursiva
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             scanAndNeutralize(child)
         }
     }
 
-    /**
-     * Calcula as dimensões e executa o movimento de Swipe correto 
-     * dependendo se a tela está Em Pé (Vertical) ou Deitada (Horizontal).
-     */
     private fun performSmartSwipe() {
         val displayMetrics = resources.displayMetrics
         val width = displayMetrics.widthPixels.toFloat()
@@ -64,19 +88,15 @@ class ShieldService : AccessibilityService() {
         val swipePath = Path()
 
         if (isLandscape) {
-            // TELA DEITADA (Jogos / Vídeos): Desliza da direita para a esquerda
             val startX = width * 0.8f
             val endX = width * 0.2f
             val middleY = height / 2f
-
             swipePath.moveTo(startX, middleY)
             swipePath.lineTo(endX, middleY)
         } else {
-            // TELA EM PÉ (TikTok / Kwai / Shorts): Desliza de baixo para cima
             val middleX = width / 2f
             val startY = height * 0.8f
             val endY = height * 0.2f
-
             swipePath.moveTo(middleX, startY)
             swipePath.lineTo(middleX, endY)
         }
