@@ -2,16 +2,15 @@ package com.shieldai.app
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
-import android.view.accessibility.AccessibilityEvent
-import android.widget.Toast
 import android.os.Handler
 import android.os.Looper
+import android.view.accessibility.AccessibilityEvent
+import android.widget.Toast
 
 class ShieldService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        // Configura o serviço diretamente no código sem precisar do arquivo XML
         val info = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPES_ALL_MASK
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
@@ -22,10 +21,12 @@ class ShieldService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        event?.let {
-            val packageName = it.packageName?.toString() ?: "App"
-            val eventTexts = it.text.filterNotNull().joinToString(" ")
+        val eventObject = event ?: return
+        val packageName = eventObject.packageName?.toString() ?: "App"
+        val textList = eventObject.text
 
+        if (!textList.isNullOrEmpty()) {
+            val eventTexts = textList.filterNotNull().joinToString(" ")
             if (eventTexts.isNotBlank()) {
                 Handler(Looper.getMainLooper()).post {
                     Toast.makeText(
@@ -38,5 +39,7 @@ class ShieldService : AccessibilityService() {
         }
     }
 
-    override fun onInterrupt() {}
+    override fun onInterrupt() {
+        // Chamado caso o sistema interrompa o serviço
+    }
 }
