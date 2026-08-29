@@ -1,41 +1,31 @@
 package com.shieldai.app
 
-import android.app.Activity
-import android.os.Bundle
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.widget.Button
-import android.content.Intent
-import android.provider.Settings
-import android.view.Gravity
+import android.accessibilityservice.AccessibilityService
+import android.os.Handler
+import android.os.Looper
+import android.view.accessibility.AccessibilityEvent
+import android.widget.Toast
 
-class MainActivity : Activity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+class ShieldService : AccessibilityService() {
 
-        // Criar o layout principal via código
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(50, 50, 50, 50)
-        }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event == null) return
 
-        val title = TextView(this).apply {
-            text = "ShieldAI Ativo"
-            textSize = 24f
-            gravity = Gravity.CENTER
-        }
+        val packageName = event.packageName?.toString() ?: "App"
+        val textList = event.text
 
-        val button = Button(this).apply {
-            text = "Ativar Serviço de Acessibilidade"
-            setOnClickListener {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        if (textList != null && textList.isNotEmpty()) {
+            val textContent = textList.toString()
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(
+                    applicationContext,
+                    "[$packageName]: $textContent",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
+    }
 
-        layout.addView(title)
-        layout.addView(button)
-
-        setContentView(layout)
+    override fun onInterrupt() {
     }
 }
