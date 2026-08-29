@@ -8,6 +8,13 @@ import android.widget.Toast
 
 class ShieldService : AccessibilityService() {
 
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(applicationContext, "ShieldAI Conectado!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val eventObject = event ?: return
         val packageName = eventObject.packageName?.toString() ?: "App"
