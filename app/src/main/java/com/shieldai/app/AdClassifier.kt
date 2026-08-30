@@ -4,7 +4,6 @@ import android.view.accessibility.AccessibilityNodeInfo
 
 object AdClassifier {
 
-    // Identificadores universais de publicidade
     private val adKeywords = listOf(
         "patrocinado", "sponsored", "anúncio", "publicidade", 
         "promovido", "promoted", "ad ", "ads ", "saiba mais", 
@@ -15,26 +14,26 @@ object AdClassifier {
         "pular", "skip", "fechar", "close", "dismiss", "x"
     )
 
-    // IDs de layouts conhecidos de redes de anúncios (AdMob, Unity Ads, etc)
+    // IDs de contêineres e botões de fechar usados por SDKs de anúncio (AdMob, Unity, AppLovin, IronSource)
     private val adViewIds = listOf(
-        "ad_view", "banner_ad", "native_ad", "sponsor", "ads_container"
+        "ad_view", "banner_ad", "native_ad", "sponsor", "ads_container",
+        "tt_ad", "anythink", "applovin", "mbridge", "close_btn", "btn_close",
+        "closebutton", "dismiss_button", "ksad_kwai"
     )
 
     fun isAdElement(node: AccessibilityNodeInfo): Boolean {
-        val text = (node.text?.toString() ?: node.contentDescription?.toString())?.lowercase() ?: ""
         val viewId = node.viewIdResourceName?.lowercase() ?: ""
+        val text = (node.text?.toString() ?: node.contentDescription?.toString())?.lowercase() ?: ""
 
-        // Verifica por ID de recurso de redes de ad
+        // Check por ID de infraestrutura de anúncios
         for (id in adViewIds) {
             if (viewId.contains(id)) return true
         }
 
-        // Verifica por texto de patrocínio ou chamada de ad
+        // Check por texto tradicional
         if (text.isNotBlank()) {
             for (keyword in adKeywords) {
-                if (text == keyword || text.startsWith("$keyword ") || text.endsWith(" $keyword")) {
-                    return true
-                }
+                if (text == keyword || text.contains(keyword)) return true
             }
         }
         return false
@@ -46,8 +45,16 @@ object AdClassifier {
 
         if (!node.isClickable) return false
 
+        // 1. Detecta botões com IDs típicos de fechar ("close", "btn_close", "x")
+        for (id in adViewIds) {
+            if (viewId.contains("close") || viewId.contains("skip") || viewId.contains("dismiss")) {
+                return true
+            }
+        }
+
+        // 2. Detecta por texto/descrição
         for (keyword in actionKeywords) {
-            if (text.contains(keyword) || viewId.contains(keyword)) {
+            if (text == keyword || text.contains(keyword) || viewId.contains(keyword)) {
                 return true
             }
         }
