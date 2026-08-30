@@ -4,36 +4,49 @@ import android.view.accessibility.AccessibilityNodeInfo
 
 object AdClassifier {
 
+    // Termos textuais universais (Português, Inglês e Espanhol)
     private val adKeywords = listOf(
-        "patrocinado", "sponsored", "anúncio", "publicidade", 
-        "promovido", "promoted", "ad ", "ads ", "saiba mais", 
-        "instalar agora", "comprar agora", "shop now", "install now"
+        "patrocinado", "sponsored", "anúncio", "publicidade", "promovido", "promoted", 
+        "ad ", "ads ", "saiba mais", "instalar agora", "comprar agora", "shop now", 
+        "install now", "baixar agora", "download now", "publicidad"
     )
 
+    // Ações de fechamento/pulo
     private val actionKeywords = listOf(
-        "pular", "skip", "fechar", "close", "dismiss", "x"
+        "pular", "skip", "fechar", "close", "dismiss", "x", "cancelar", "cancel"
     )
 
-    // IDs de contêineres e botões de fechar usados por SDKs de anúncio (AdMob, Unity, AppLovin, IronSource)
+    // IDs de contêineres e SDKs de anúncios globais (AdMob, Unity Ads, AppLovin, Kwai, ByteDance, IronSource, Vungle)
     private val adViewIds = listOf(
         "ad_view", "banner_ad", "native_ad", "sponsor", "ads_container",
         "tt_ad", "anythink", "applovin", "mbridge", "close_btn", "btn_close",
-        "closebutton", "dismiss_button", "ksad_kwai"
+        "closebutton", "dismiss_button", "ksad_kwai", "ironsource", "vungle",
+        "ad_container", "ad_header", "ad_frame"
+    )
+
+    // Gatilhos de engenharia social / pop-ups falsos
+    private val scamKeywords = listOf(
+        "não é compatível", "dispositivo android", "tente novamente",
+        "para “atualizar” agora", "atualizar agora", "instalar o apk",
+        "seu celular está", "vírus detectado", "limpar memória"
     )
 
     fun isAdElement(node: AccessibilityNodeInfo): Boolean {
         val viewId = node.viewIdResourceName?.lowercase() ?: ""
         val text = (node.text?.toString() ?: node.contentDescription?.toString())?.lowercase() ?: ""
 
-        // Check por ID de infraestrutura de anúncios
+        // Identificação por ID de infraestrutura de anúncios
         for (id in adViewIds) {
             if (viewId.contains(id)) return true
         }
 
-        // Check por texto tradicional
+        // Identificação por texto direto de publicidade
         if (text.isNotBlank()) {
             for (keyword in adKeywords) {
                 if (text == keyword || text.contains(keyword)) return true
+            }
+            for (scam in scamKeywords) {
+                if (text.contains(scam)) return true
             }
         }
         return false
@@ -45,14 +58,14 @@ object AdClassifier {
 
         if (!node.isClickable) return false
 
-        // 1. Detecta botões com IDs típicos de fechar ("close", "btn_close", "x")
+        // Detecção por ID de botão de fechar/pular
         for (id in adViewIds) {
             if (viewId.contains("close") || viewId.contains("skip") || viewId.contains("dismiss")) {
                 return true
             }
         }
 
-        // 2. Detecta por texto/descrição
+        // Detecção por texto de botão
         for (keyword in actionKeywords) {
             if (text == keyword || text.contains(keyword) || viewId.contains(keyword)) {
                 return true
