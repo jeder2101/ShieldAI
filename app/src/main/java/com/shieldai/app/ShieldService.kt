@@ -15,16 +15,24 @@ class ShieldService : AccessibilityService() {
     private var lastActionTime: Long = 0
     private val handler = Handler(Looper.getMainLooper())
 
-    private val ignoredPackages = setOf(
-        "br.com.gft.cesta", "br.gov.caixa.tem", "com.itau", 
-        "br.com.bradesco.next", "com.nu.production", "com.santander.app", 
-        "com.android.launcher", "com.sec.android.app.launcher", 
-        "com.google.android.apps.nexuslauncher"
+    // LISTA COMPLETA DE APPS SENSÍVEIS (BANCOS, CARTEIRAS, GOVERNO E TELA DE INÍCIO)
+    private val ignoredKeywords = listOf(
+        // Bancos e Fintechs
+        "caixa", "gft.cesta", "itau", "bradesco", "next", "nubank", "santander",
+        "inter", "c6bank", "bancopan", "pagbank", "pagseguro", "picpay", "mercadopago",
+        "stone", "ton", "neon", "bs2", "original", "safra", "sicoob", "sicredi",
+        
+        // Apps Governamentais e Documentos
+        "gov.br", "carteiradigital", "fgts", "e-titulo", "cnh",
+        
+        // System UI e Launchers (Gaveta de Apps / Tela Inicial)
+        "launcher", "systemui", "trebuchet", "miui.home", "oneui"
     )
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val packageName = event?.packageName?.toString() ?: return
 
+        // Interrompe imediatamente se for banco, governo ou tela inicial
         if (isIgnoredPackage(packageName)) return
 
         val rootNode = rootInActiveWindow ?: return
@@ -36,14 +44,14 @@ class ShieldService : AccessibilityService() {
 
     private fun isIgnoredPackage(packageName: String): Boolean {
         val lower = packageName.lowercase()
-        for (ignored in ignoredPackages) {
-            if (lower.contains(ignored) || lower.contains("caixa") || lower.contains("launcher")) return true
+        for (keyword in ignoredKeywords) {
+            if (lower.contains(keyword)) return true
         }
         return false
     }
 
     private fun scanAndNeutralizeAllTypes(node: AccessibilityNodeInfo) {
-        // AÇÃO 1: Clique em Botão de Fechar/Pular/Cancelar (Tipos 2, 3 e 5)
+        // 1. Clique em Botão de Fechar/Pular/Cancelar (Tipos 2, 3 e 5)
         if (AdClassifier.isCloseOrSkipButton(node)) {
             if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                 lastActionTime = System.currentTimeMillis()
@@ -52,19 +60,17 @@ class ShieldService : AccessibilityService() {
             }
         }
 
-        // AÇÃO 2: Trata Feeds Verticais ou Banners sem Botão (Tipos 1 e 4)
+        // 2. Trata Feeds Verticais ou Banners sem Botão (Tipos 1 e 4)
         if (AdClassifier.isAdElement(node)) {
-            // Primeiro tenta encontrar um botão de fechar nos filhos ou no contêiner pai
             if (findAndClickCloseInAncestors(node)) return
 
-            // Se não houver botão, faz o Swipe Adaptativo para rolar/tirar o anúncio da tela
             lastActionTime = System.currentTimeMillis()
             notifyUser("ShieldAI: Anúncio neutralizado!")
             performSmartSwipe()
             return
         }
 
-        // Varredura nos nós filhos
+        // Varredura recursiva nos nós filhos
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             scanAndNeutralizeAllTypes(child)
