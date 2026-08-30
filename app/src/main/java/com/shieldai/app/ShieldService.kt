@@ -51,7 +51,7 @@ class ShieldService : AccessibilityService() {
     }
 
     private fun scanAndNeutralizeAllTypes(node: AccessibilityNodeInfo) {
-        // 1. Clique em Botão de Fechar/Pular/Cancelar (Tipos 2, 3 e 5)
+        // 1. Clique direto em Botão de Fechar/Pular/Cancelar (Tipos 2, 3 e 5)
         if (AdClassifier.isCloseOrSkipButton(node)) {
             if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                 lastActionTime = System.currentTimeMillis()
@@ -60,12 +60,17 @@ class ShieldService : AccessibilityService() {
             }
         }
 
-        // 2. Trata Feeds Verticais ou Banners sem Botão (Tipos 1 e 4)
+        // 2. Se for um Anúncio/Bet detectado
         if (AdClassifier.isAdElement(node)) {
+            // A) Tenta fechar procurando o botão "X" nos nós superiores
             if (findAndClickCloseInAncestors(node)) return
 
+            // B) Se for anúncio em tela cheia / temporizado (ex: Bet), força clique no "X" (Canto Superior)
             lastActionTime = System.currentTimeMillis()
-            notifyUser("ShieldAI: Anúncio neutralizado!")
+            notifyUser("ShieldAI: Fechando anúncio de tempo!")
+            performTopRightClick()
+
+            // C) Se for anúncio em feed/rolagem, executa o Swipe para passar
             performSmartSwipe()
             return
         }
@@ -97,6 +102,21 @@ class ShieldService : AccessibilityService() {
         return false
     }
 
+    // Clique cirúrgico no canto superior direito (para anúncios de imagem/tempo em tela cheia)
+    private fun performTopRightClick() {
+        val displayMetrics = resources.displayMetrics
+        val width = displayMetrics.widthPixels.toFloat()
+        val height = displayMetrics.heightPixels.toFloat()
+
+        val clickPath = Path()
+        clickPath.moveTo(width * 0.92f, height * 0.06f)
+
+        val gestureBuilder = GestureDescription.Builder()
+        gestureBuilder.addStroke(GestureDescription.StrokeDescription(clickPath, 0, 50))
+        dispatchGesture(gestureBuilder.build(), null, null)
+    }
+
+    // Rolagem inteligente para feeds e banners patrocinados
     private fun performSmartSwipe() {
         val displayMetrics = resources.displayMetrics
         val width = displayMetrics.widthPixels.toFloat()
